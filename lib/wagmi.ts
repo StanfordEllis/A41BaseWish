@@ -1,7 +1,8 @@
-import { coinbaseWallet, injected } from "wagmi/connectors";
-import { createConfig, http } from "wagmi";
+import { baseAccount, coinbaseWallet, injected } from "wagmi/connectors";
+import { cookieStorage, createConfig, createStorage, http } from "wagmi";
 import { base } from "wagmi/chains";
 import type { Address, Hex } from "viem";
+import { Attribution } from "ox/erc8021";
 
 declare global {
   interface Window {
@@ -10,9 +11,13 @@ declare global {
   }
 }
 
-export const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || base.id);
+export const chainId = base.id;
 export const contractAddress = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x3Dec861f9810B9ef5240eCC0325763A3d2931F61") as Address;
-export const dataSuffix = ((process.env.NEXT_PUBLIC_DATA_SUFFIX || "0x") as Hex);
+export const builderCode = process.env.NEXT_PUBLIC_BUILDER_CODE || "bc_e6kr1v4d";
+export const attributionVersion = "v2";
+export const dataSuffix = Attribution.toDataSuffix({
+  codes: [builderCode]
+}) as Hex;
 export const zeroAddress = "0x0000000000000000000000000000000000000000" as const;
 
 const findProvider = (matcher: (provider: any) => boolean) => {
@@ -50,13 +55,21 @@ export const coinbaseConnector = coinbaseWallet({
   preference: "all"
 });
 
+export const baseAccountConnector = baseAccount({
+  appName: "BaseWish",
+  preference: { options: "all" }
+});
+
 export const config = createConfig({
   chains: [base],
-  connectors: [okxConnector, metaMaskConnector, coinbaseConnector],
+  connectors: [okxConnector, metaMaskConnector, baseAccountConnector, coinbaseConnector],
   transports: {
     [base.id]: http()
   },
   multiInjectedProviderDiscovery: false,
+  storage: createStorage({
+    storage: cookieStorage
+  }),
   ssr: true
 });
 

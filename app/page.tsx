@@ -2,16 +2,17 @@
 
 import { Archive, CheckCircle2, Heart, Link2, Send, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Address, isAddress } from "viem";
+import { Address, concatHex, encodeFunctionData, isAddress } from "viem";
 import {
   useAccount,
   useReadContract,
   useReadContracts,
+  useSendCalls,
+  useSendTransaction,
   useWaitForTransactionReceipt,
-  useWriteContract
 } from "wagmi";
 import { baseWishAbi } from "@/lib/abi";
-import { config, contractAddress, dataSuffix, isRealContract, shortAddress, zeroAddress } from "@/lib/wagmi";
+import { attributionVersion, builderCode, chainId, config, contractAddress, dataSuffix, isRealContract, shortAddress, zeroAddress } from "@/lib/wagmi";
 import { WalletButtons } from "@/components/WalletButtons";
 
 const tags = ["Health", "Travel", "Study", "Work", "Life"];
@@ -33,14 +34,18 @@ const contract = {
 } as const;
 
 export default function Home() {
-  const { address, isConnected } = useAccount();
+  const { address, connector, isConnected } = useAccount();
   const [text, setText] = useState("");
   const [tag, setTag] = useState(tags[0]);
   const [status, setStatus] = useState("");
   const [hash, setHash] = useState<`0x${string}`>();
   const [copied, setCopied] = useState(false);
-  const { writeContractAsync, isPending } = useWriteContract({ config });
+  const { sendTransactionAsync, isPending: isSendingTransaction } = useSendTransaction({ config });
+  const { sendCallsAsync, isPending: isSendingCalls } = useSendCalls({ config });
   const receipt = useWaitForTransactionReceipt({ hash, config });
+  const isPending = isSendingTransaction || isSendingCalls;
+  const suffixTail = dataSuffix.slice(-12);
+  const attributionStatus = `Onchain attribution: suffix enabled · ${attributionVersion} · ...${suffixTail}`;
 
   const referrer = useMemo(() => {
     if (typeof window === "undefined") return zeroAddress;
@@ -112,6 +117,40 @@ export default function Home() {
     await Promise.all([refetchCount(), refetchWishes(), refetchStats()]);
   };
 
+  async function sendAttributedCall(functionName: "createWish" | "supportWish" | "markFulfilled" | "archiveWish", args: readonly unknown[]) {
+    const callData = encodeFunctionData({
+      abi: baseWishAbi,
+      functionName,
+      args
+    } as any);
+    const data = concatHex([callData, dataSuffix]);
+
+    if (connector?.id === "baseAccount") {
+      const result = await sendCallsAsync({
+        calls: [
+          {
+            to: contractAddress,
+            data,
+            value: 0n
+          }
+        ],
+        capabilities: {
+          dataSuffix: { value: dataSuffix }
+        },
+        chainId,
+        experimental_fallback: true
+      } as any);
+      return (typeof result === "string" ? result : result.id) as `0x${string}`;
+    }
+
+    return sendTransactionAsync({
+      to: contractAddress,
+      data,
+      value: 0n,
+      chainId
+    });
+  }
+
   async function submitWish() {
     if (!isConnected) {
       setStatus("Choose a wallet below");
@@ -128,13 +167,7 @@ export default function Home() {
     }
 
     setStatus("Posting...");
-    const tx = await writeContractAsync({
-      ...contract,
-      functionName: "createWish",
-      args: [trimmed, tag, referrer],
-      chainId: 8453,
-      dataSuffix
-    });
+    const tx = await sendAttributedCall("createWish", [trimmed, tag, referrer]);
     setHash(tx);
     setText("");
     setStatus("Post Another");
@@ -146,13 +179,7 @@ export default function Home() {
       return;
     }
     setStatus("Sending...");
-    const tx = await writeContractAsync({
-      ...contract,
-      functionName,
-      args,
-      chainId: 8453,
-      dataSuffix
-    } as any);
+    const tx = await sendAttributedCall(functionName, args);
     setHash(tx);
     await refreshAll();
   }
@@ -178,6 +205,8 @@ export default function Home() {
             </div>
             <h1 className="mt-3 text-4xl font-bold text-[#302b3e] sm:text-5xl">BaseWish</h1>
             <p className="mt-2 text-base text-[#665f77]">Write wishes. Share support on Base.</p>
+            <p className="mt-2 text-xs font-semibold text-[#6d657b]">{attributionStatus}</p>
+            <p className="mt-1 text-xs text-[#8b8496]">Builder code: {builderCode}</p>
           </div>
           <WalletButtons />
         </div>

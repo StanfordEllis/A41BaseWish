@@ -3,7 +3,7 @@
 import { LogOut, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { coinbaseConnector, metaMaskConnector, okxConnector, shortAddress } from "@/lib/wagmi";
+import { baseAccountConnector, coinbaseConnector, metaMaskConnector, okxConnector, shortAddress } from "@/lib/wagmi";
 
 function getInjectedProviders(): any[] {
   if (typeof window === "undefined") return [];
@@ -12,10 +12,10 @@ function getInjectedProviders(): any[] {
   return Array.isArray(eth.providers) ? eth.providers : [eth];
 }
 
-type WalletKind = "okx" | "metamask" | "coinbase";
+type WalletKind = "okx" | "metamask" | "base" | "coinbase";
 
 function isWalletDetected(kind: WalletKind) {
-  if (kind === "coinbase") return true;
+  if (kind === "base" || kind === "coinbase") return true;
   if (typeof window === "undefined") return false;
   const providers = getInjectedProviders();
   if (kind === "okx") {
@@ -35,6 +35,7 @@ export function WalletButtons() {
     () => [
       { name: "OKX Wallet", connector: okxConnector, detected: "okx" as WalletKind },
       { name: "MetaMask", connector: metaMaskConnector, detected: "metamask" },
+      { name: "Base Account", connector: baseAccountConnector, detected: "base" },
       { name: "Coinbase Wallet", connector: coinbaseConnector, detected: "coinbase" }
     ],
     []
@@ -78,7 +79,7 @@ export function WalletButtons() {
 
   return (
     <div className="rounded-[8px] border border-white/70 bg-white/72 p-3 shadow-note backdrop-blur">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
         {wallets.map((wallet) => (
           <button
             key={wallet.name}
